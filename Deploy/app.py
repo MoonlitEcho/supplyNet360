@@ -21,7 +21,24 @@ st.set_page_config(
     page_icon="🔮",
     layout="wide"
 )
+# ═══════════════════════════════════════════════════════════════════
+# FEATURE NAME MAPPING (ML -> Business Meaning)
+# ═══════════════════════════════════════════════════════════════════
 
+FEATURE_LABELS = {
+    "rolling_mean_7": "Recent Weekly Demand Trend",
+    "rolling_std_7": "Demand Volatility (7-day)",
+    "lag_1": "Yesterday Demand",
+    "lag_7": "Demand Same Day Last Week",
+    "lag_14": "Demand Two Weeks Ago",
+    "price_unit": "Product Price",
+    "promotion_flag": "Promotion Active",
+    "stock_available": "Inventory Level",
+    "delivery_days": "Delivery Time",
+    "dayofweek": "Day of Week Seasonality",
+    "month": "Seasonal Month Trend",
+    "day": "Day of Month Pattern"
+}
 # ═══════════════════════════════════════════════════════════════════
 # STYLING
 # ═══════════════════════════════════════════════════════════════════
@@ -293,9 +310,13 @@ elif nav_mode == "🔮 Forecast":
         with st.spinner("🔮 Consulting the Oracle..."):
             promo_flag = int(promo_intensity > 0.5)
             payload = {
-                "category": selected_category, "sku": selected_sku, "date": forecast_date.isoformat(),
-                "price_unit": float(price), "promotion_flag": promo_flag,
-                "stock_available": int(stock), "delivery_days": int(delivery_days)
+                "category": selected_category, 
+                "sku": selected_sku, 
+                "date": forecast_date.isoformat(),
+                "price_unit": float(price), 
+                "promotion_flag": promo_flag,
+                "stock_available": int(stock), 
+                "delivery_days": int(delivery_days)
             }
             
             response_data = safe_api_call(payload)
@@ -304,24 +325,40 @@ elif nav_mode == "🔮 Forecast":
                 base_ci_low, base_ci_high = response_data["confidence_interval"]
                 shap_imp = response_data["shap_importance"]
                 
-                enhanced_pred = enhance_prediction(base_pred, selected_category, selected_sku, forecast_date, price, promo_flag, stock, delivery_days)
-                enhanced_ci_low, enhanced_ci_high = enhance_confidence_interval(base_ci_low, base_ci_high, selected_category, promo_flag)
+                enhanced_pred = enhance_prediction(
+                    base_pred, selected_category, selected_sku, 
+                    forecast_date, price, promo_flag, stock, delivery_days
+                )
+                enhanced_ci_low, enhanced_ci_high = enhance_confidence_interval(
+                    base_ci_low, base_ci_high, selected_category, promo_flag
+                )
                 ci_width = enhanced_ci_high - enhanced_ci_low
                 enhanced_ci_low = enhanced_pred - ci_width / 2
                 enhanced_ci_high = enhanced_pred + ci_width / 2
                 
-                st.markdown(f'<div class="prediction-box">🎯 PREDICTED DEMAND<br>{enhanced_pred:.0f} units on {forecast_date}</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="prediction-box">🎯 PREDICTED DEMAND<br>{enhanced_pred:.0f} units on {forecast_date}</div>', 
+                    unsafe_allow_html=True
+                )
                 
                 with st.spinner("🤖 Generating AI Insights..."):
                     ai_insight = generate_ai_insights(selected_category, shap_imp, enhanced_pred)
-                st.markdown(f'<div class="insight-card"><h3>🧠 Oracle Wisdom</h3><p>{ai_insight}</p></div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="insight-card"><h3>🧠 Oracle Wisdom</h3><p>{ai_insight}</p></div>', 
+                    unsafe_allow_html=True
+                )
                 
                 col_ci1, col_ci2 = st.columns([2, 1])
                 with col_ci1:
-                    fig_ci = go.Figure(data=[go.Bar(x=["Lower", "Prediction", "Upper"], y=[enhanced_ci_low, enhanced_pred, enhanced_ci_high],
-                                                     marker=dict(color=["#ef5350", "#667eea", "#42a5f5"]),
-                                                     text=[f"{enhanced_ci_low:.0f}", f"{enhanced_pred:.0f}", f"{enhanced_ci_high:.0f}"],
-                                                     textposition="outside")])
+                    fig_ci = go.Figure(data=[
+                        go.Bar(
+                            x=["Lower", "Prediction", "Upper"], 
+                            y=[enhanced_ci_low, enhanced_pred, enhanced_ci_high],
+                            marker=dict(color=["#ef5350", "#667eea", "#42a5f5"]),
+                            text=[f"{enhanced_ci_low:.0f}", f"{enhanced_pred:.0f}", f"{enhanced_ci_high:.0f}"],
+                            textposition="outside"
+                        )
+                    ])
                     fig_ci.update_layout(template="plotly_white", height=300, showlegend=False)
                     st.plotly_chart(fig_ci, use_container_width=True)
                 with col_ci2:
@@ -330,12 +367,32 @@ elif nav_mode == "🔮 Forecast":
                     <p><b>Range:</b> ±{abs(enhanced_ci_high - enhanced_pred):.0f}</p></div>""", unsafe_allow_html=True)
                 
                 st.divider()
+                
+                # Top SHAP features - FIXED INDENTATION
                 top_features = dict(sorted(shap_imp.items(), key=lambda x: x[1], reverse=True)[:8])
-                fig_shap = px.bar(x=list(top_features.values()), y=list(top_features.keys()), orientation='h',
-                                  title="🔍 Feature Impact (SHAP Values)", color=list(top_features.values()),
-                                  color_continuous_scale="Viridis")
-                fig_shap.update_layout(template="plotly_white", height=400)
+                
+                # Convert ML feature names -> business friendly names
+                top_features_readable = {
+                    FEATURE_LABELS.get(k, k): v
+                    for k, v in top_features.items()
+                }
+                
+                fig_shap = px.bar(
+                    x=list(top_features_readable.values()),
+                    y=list(top_features_readable.keys()),
+                    orientation="h",
+                    title="🔍 Business Drivers of Demand",
+                    color=list(top_features_readable.values()),
+                    color_continuous_scale="Viridis"
+                )
+                
+                fig_shap.update_layout(
+                    template="plotly_white",
+                    height=400
+                )
+                
                 st.plotly_chart(fig_shap, use_container_width=True)
+                
                 st.balloons()
             else:
                 st.error("❌ Forecast failed. Check API connection.")
@@ -351,16 +408,24 @@ elif nav_mode == "📊 Analytics":
         cat_data = predictions_df[predictions_df["category"] == selected_cat_analytics]
         if not cat_data.empty:
             st.subheader("🌌 3D Sales Cosmos")
-            fig_3d = px.scatter_3d(cat_data, x="price_unit", y="stock_available", z="units_sold", color="promotion_flag",
-                                   hover_data=["sku", "date"], title=f"{selected_cat_analytics}: Price × Stock × Demand",
-                                   color_discrete_map={0: "#667eea", 1: "#ab47bc"})
+            fig_3d = px.scatter_3d(
+                cat_data, x="price_unit", y="stock_available", z="units_sold", 
+                color="promotion_flag",
+                hover_data=["sku", "date"], 
+                title=f"{selected_cat_analytics}: Price × Stock × Demand",
+                color_discrete_map={0: "#667eea", 1: "#ab47bc"}
+            )
             fig_3d.update_layout(template="plotly_white", height=600)
             st.plotly_chart(fig_3d, use_container_width=True)
             
             st.subheader("📈 Temporal Trends")
             cat_data["week"] = cat_data["date"].dt.to_period("W").astype(str)
             weekly = cat_data.groupby("week")[["units_sold"]].sum().reset_index()
-            fig_trend = px.line(weekly, x="week", y="units_sold", title=f"{selected_cat_analytics}: Weekly Demand", markers=True)
+            fig_trend = px.line(
+                weekly, x="week", y="units_sold", 
+                title=f"{selected_cat_analytics}: Weekly Demand", 
+                markers=True
+            )
             fig_trend.update_traces(line=dict(color="#667eea", width=3), marker=dict(size=8))
             fig_trend.update_layout(template="plotly_white", height=400)
             st.plotly_chart(fig_trend, use_container_width=True)
@@ -375,33 +440,42 @@ elif nav_mode == "📊 Analytics":
 elif nav_mode == "🧠 Insights":
     st.markdown('<div class="wow-section"><h2>🤖 AI-Powered Intelligence</h2></div>', unsafe_allow_html=True)
     insights_category = st.selectbox("Select Category", categories, key="insights_cat")
+    
     if st.button("🔮 Generate Insights", use_container_width=True):
-        with st.spinner("🧠 Analyzing category data..."):
+        with st.spinner("🧠 Fetching model insights..."):
             try:
-                predictions_df = pd.read_csv("outputs_final_model/predictions.csv")
-                cat_data = predictions_df[predictions_df["category"] == insights_category]
-                if not cat_data.empty:
-                    numeric_cols = ['price_unit', 'stock_available', 'promotion_flag', 'delivery_days', 'units_sold']
-                    available_cols = [col for col in numeric_cols if col in cat_data.columns]
-                    if len(available_cols) > 1:
-                        correlations = cat_data[available_cols].corr()['units_sold'].drop('units_sold')
-                        top_features = correlations.abs().sort_values(ascending=False).head(10)
-                        top_driver = top_features.index[0]
-                        top_impact = abs(correlations[top_driver])
-                        st.markdown(f'<div class="insight-card"><h3>🏆 Top Driver: {top_driver}</h3><p style="font-size: 1.2rem;"><b>Correlation Impact: {top_impact:.2%}</b></p></div>', unsafe_allow_html=True)
-                        
-                        fig_corr = px.bar(x=top_features.values, y=top_features.index, orientation='h',
-                                          title=f"Feature Correlation with Demand - {insights_category}",
-                                          color=top_features.values, color_continuous_scale="Plasma")
-                        fig_corr.update_layout(template="plotly_white", height=500)
-                        st.plotly_chart(fig_corr, use_container_width=True)
-                        st.success("✅ Insights generated successfully!")
-                    else:
-                        st.warning("Insufficient numerical features for correlation analysis.")
+                response = safe_api_call(
+                    {"sample_size": 200},
+                    endpoint=f"/insights/{insights_category}",
+                    method="GET"
+                )
+                
+                if response:
+                    top_driver = response["top_driver"]
+                    top_impact = response["top_impact_pct"]
+                    shap_importance = response["avg_shap_importance"]
+                    
+                    st.markdown(f"""
+                    <div class="insight-card">
+                    <h3>🏆 Top Driver: {top_driver}</h3>
+                    <p style="font-size:1.2rem"><b>Impact: {top_impact}</b></p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    fig = px.bar(
+                        x=list(shap_importance.values()),
+                        y=list(shap_importance.keys()),
+                        orientation="h",
+                        title=f"Feature Impact (SHAP) - {insights_category}",
+                        color=list(shap_importance.values()),
+                        color_continuous_scale="Plasma"
+                    )
+                    
+                    fig.update_layout(template="plotly_white", height=500)
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.success("✅ Insights generated successfully!")
                 else:
-                    st.warning(f"No data available for {insights_category}")
-            except FileNotFoundError:
-                st.error("❌ Predictions data file not found.")
+                    st.error("❌ Could not retrieve insights from API.")
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
 
@@ -492,7 +566,10 @@ elif nav_mode == "🎯 Scenarios":
     with tab1:
         st.subheader("📊 Baseline Growth Scenario")
         baseline_df = pd.DataFrame({"Date": dates, "Demand": baseline_data})
-        fig_baseline = px.line(baseline_df, x="Date", y="Demand", markers=True, title=f"{selected_scenario_product}: Baseline Demand Forecast")
+        fig_baseline = px.line(
+            baseline_df, x="Date", y="Demand", markers=True, 
+            title=f"{selected_scenario_product}: Baseline Demand Forecast"
+        )
         fig_baseline.update_traces(line=dict(color="#667eea", width=3), marker=dict(size=6, symbol="circle"))
         fig_baseline.update_layout(template="plotly_white", height=450, hovermode="x unified", showlegend=False)
         st.plotly_chart(fig_baseline, use_container_width=True)
@@ -511,7 +588,10 @@ elif nav_mode == "🎯 Scenarios":
     with tab2:
         st.subheader("🎉 Festival Surge Scenario")
         festival_df = pd.DataFrame({"Date": dates, "Demand": festival_data})
-        fig_festival = px.line(festival_df, x="Date", y="Demand", markers=True, title=f"{selected_scenario_product}: Festival Season Forecast")
+        fig_festival = px.line(
+            festival_df, x="Date", y="Demand", markers=True, 
+            title=f"{selected_scenario_product}: Festival Season Forecast"
+        )
         fig_festival.update_traces(line=dict(color="#f57c00", width=3), marker=dict(size=6, symbol="diamond"))
         fig_festival.update_layout(template="plotly_white", height=450, hovermode="x unified", showlegend=False)
         st.plotly_chart(fig_festival, use_container_width=True)
@@ -530,7 +610,10 @@ elif nav_mode == "🎯 Scenarios":
     with tab3:
         st.subheader("💰 Price Cut Scenario")
         pricecut_df = pd.DataFrame({"Date": dates, "Demand": pricecut_data})
-        fig_pricecut = px.line(pricecut_df, x="Date", y="Demand", markers=True, title=f"{selected_scenario_product}: Price Reduction Impact")
+        fig_pricecut = px.line(
+            pricecut_df, x="Date", y="Demand", markers=True, 
+            title=f"{selected_scenario_product}: Price Reduction Impact"
+        )
         fig_pricecut.update_traces(line=dict(color="#c62828", width=3), marker=dict(size=6, symbol="square"))
         fig_pricecut.update_layout(template="plotly_white", height=450, hovermode="x unified", showlegend=False)
         st.plotly_chart(fig_pricecut, use_container_width=True)
@@ -548,9 +631,17 @@ elif nav_mode == "🎯 Scenarios":
     
     with tab4:
         st.subheader("⚖️ All Scenarios Comparison")
-        comparison_df = pd.DataFrame({"Date": dates, "Baseline": baseline_data, "Festival Surge": festival_data, "Price Cut": pricecut_data})
-        fig_comparison = px.line(comparison_df, x="Date", y=["Baseline", "Festival Surge", "Price Cut"], markers=True,
-                                 title=f"{selected_scenario_product}: Scenario Overlay ({horizon_days} days)")
+        comparison_df = pd.DataFrame({
+            "Date": dates, 
+            "Baseline": baseline_data, 
+            "Festival Surge": festival_data, 
+            "Price Cut": pricecut_data
+        })
+        fig_comparison = px.line(
+            comparison_df, x="Date", y=["Baseline", "Festival Surge", "Price Cut"], 
+            markers=True,
+            title=f"{selected_scenario_product}: Scenario Overlay ({horizon_days} days)"
+        )
         fig_comparison.update_traces(line=dict(width=3), marker=dict(size=6))
         fig_comparison.update_layout(template="plotly_white", height=500, hovermode="x unified")
         st.plotly_chart(fig_comparison, use_container_width=True)
@@ -561,16 +652,23 @@ elif nav_mode == "🎯 Scenarios":
             "Avg Daily": [f"{baseline_data.mean():.0f}", f"{festival_data.mean():.0f}", f"{pricecut_data.mean():.0f}"],
             "Peak": [f"{baseline_data.max():.0f}", f"{festival_data.max():.0f}", f"{pricecut_data.max():.0f}"],
             "Total": [f"{baseline_data.sum():.0f}", f"{festival_data.sum():.0f}", f"{pricecut_data.sum():.0f}"],
-            "Volatility": [f"{baseline_data.std() / baseline_data.mean():.1%}", 
-                          f"{festival_data.std() / festival_data.mean():.1%}",
-                          f"{pricecut_data.std() / pricecut_data.mean():.1%}"]
+            "Volatility": [
+                f"{baseline_data.std() / baseline_data.mean():.1%}", 
+                f"{festival_data.std() / festival_data.mean():.1%}",
+                f"{pricecut_data.std() / pricecut_data.mean():.1%}"
+            ]
         })
         st.dataframe(summary_table, use_container_width=True, hide_index=True)
         
         st.divider()
         if st.button("📥 Export All Scenarios", use_container_width=True):
             csv = comparison_df.to_csv(index=False)
-            st.download_button("Download CSV", csv, f"{selected_scenario_product}_scenarios_{horizon_days}d.csv", "text/csv")
+            st.download_button(
+                "Download CSV", 
+                csv, 
+                f"{selected_scenario_product}_scenarios_{horizon_days}d.csv", 
+                "text/csv"
+            )
 
 # ═══════════════════════════════════════════════════════════════════
 # PAGE: REPORTS
@@ -602,11 +700,20 @@ elif nav_mode == "📄 Reports":
                 doc = SimpleDocTemplate(buffer, pagesize=letter)
                 styles = getSampleStyleSheet()
                 story = []
-                title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=24,
-                                            textColor=colors.HexColor('#667eea'), spaceAfter=30, alignment=1)
+                title_style = ParagraphStyle(
+                    'CustomTitle', 
+                    parent=styles['Heading1'], 
+                    fontSize=24,
+                    textColor=colors.HexColor('#667eea'), 
+                    spaceAfter=30, 
+                    alignment=1
+                )
                 story.append(Paragraph("🔮 FMCG Oracle - Model Performance Report", title_style))
                 story.append(Spacer(1, 0.3*inch))
-                story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']))
+                story.append(Paragraph(
+                    f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", 
+                    styles['Normal']
+                ))
                 story.append(Spacer(1, 0.2*inch))
                 
                 data = [["Category", "R² Score", "MAPE", "Status"]]
@@ -628,7 +735,12 @@ elif nav_mode == "📄 Reports":
                 story.append(table)
                 doc.build(story)
                 buffer.seek(0)
-                st.download_button("📥 Download PDF", buffer.getvalue(), "oracle_report.pdf", "application/pdf")
+                st.download_button(
+                    "📥 Download PDF", 
+                    buffer.getvalue(), 
+                    "oracle_report.pdf", 
+                    "application/pdf"
+                )
         except Exception as e:
             st.error(f"Report Error: {str(e)}")
     

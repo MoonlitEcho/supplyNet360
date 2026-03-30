@@ -142,14 +142,17 @@ async def get_insights(category: str, sample_size: int = 100):
     insights = dict(zip(feats, avg_shap))
     top_driver = max(insights, key=insights.get)
     top_impact = insights[top_driver]
+
+    top_impact_pct = (top_impact / np.sum(avg_shap)) * 100
+    
     
     return {
-        "category": category,
-        "top_driver": top_driver,
-        "top_impact_pct": f"{(top_impact / np.sum(avg_shap) * 100):.1f}%",
-        "avg_shap_importance": insights,
-        "key_takeaway": f"{top_driver} explains ~{top_impact_pct} of demand variance—optimize it first!"
-    }
+    "category": category,
+    "top_driver": top_driver,
+    "top_impact_pct": f"{top_impact_pct:.1f}%",
+    "avg_shap_importance": insights,
+    "key_takeaway": f"{top_driver} explains ~{top_impact_pct:.1f}% of demand variance — optimize it first!"
+}
 
 @app.get("/health")
 def health():
