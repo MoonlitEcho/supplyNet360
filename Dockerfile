@@ -1,28 +1,24 @@
-FROM python:3.11-slim
-
+# Stage 1: Build
+FROM node:14 AS build
 WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
 
-COPY requirements.txt /app/requirements.txt
+# Stage 2: Production
+FROM node:14 AS production
+WORKDIR /app
+COPY --from=build /app/dist ./dist
+COPY package*.json ./
+RUN npm install --production
 
-RUN python - <<'PY'
-from pathlib import Path
-raw = Path('/app/requirements.txt').read_bytes()
-for enc in ('utf-16', 'utf-8'):
-    try:
-        txt = raw.decode(enc)
-        break
-    except UnicodeDecodeError:
-        txt = None
-if txt is None:
-    raise RuntimeError('Unable to decode requirements.txt')
-Path('/app/requirements-ci.txt').write_text(txt, encoding='utf-8')
-PY
+# Create a non-root user to run the application
+RUN useradd -m appuser
+USER appuser
 
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r /app/requirements-ci.txt
+# Health check
+HEALTHCHECK --interval=5m --timeout=3s CMD curl -f http://localhost:3000/ || exit 1
 
-COPY . /app
-
-EXPOSE 8000
-
-CMD ["uvicorn", "Deploy.api:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 3000
+CMD [ "node", "dist/index.js" ]
