@@ -1,0 +1,52 @@
+name: Cleanup Artifacts
+
+on:
+  schedule:
+    - cron: "30 2 * * 0"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete artifacts older than 14 days
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
+            let page = 1;
+            let deleted = 0;
+
+            while (true) {
+              const { data } = await github.rest.actions.listArtifactsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: 100,
+                page,
+              });
+
+              if (!data.artifacts.length) break;
+
+              for (const artifact of data.artifacts) {
+                const created = new Date(artifact.created_at).getTime();
+                if (created < cutoff) {
+                  await github.rest.actions.deleteArtifact({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    artifact_id: artifact.id,
+                  });
+                  deleted++;
+                }
+              }
+
+              if (data.artifacts.length < 100) break;
+              page++;
+            }
+
+            core.summary
+              .addHeading('Artifact Cleanup')
+              .addRaw(`Deleted ${deleted} artifact(s) older than 14 days.`)
+              .write();
