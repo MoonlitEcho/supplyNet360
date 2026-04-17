@@ -4,6 +4,8 @@
 ![Python](https://img.shields.io/badge/Python-3.8+-blue?style=flat-square&logo=python)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?style=flat-square&logo=fastapi)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.x-red?style=flat-square&logo=streamlit)
+![CI](https://github.com/MoonlitEcho/supplyNet360/actions/workflows/ci.yml/badge.svg)
+![CD](https://github.com/MoonlitEcho/supplyNet360/actions/workflows/cd.yml/badge.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
 SupplyNet 360 is an end-to-end machine learning system for demand forecasting and inventory optimization. It combines time-series modeling, modular ML pipelines, and an interactive dashboard to help businesses make data-driven supply chain decisions.
@@ -180,4 +182,3 @@ Contributions are welcome!
 5. Open a Pull Request
 
 ---
-

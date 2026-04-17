@@ -1,0 +1,138 @@
+name: CD
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prepare image metadata
+        id: meta
+        run: |
+          repo_lc=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          tag="${{ github.sha }}"
+          echo "image=${{ env.REGISTRY }}/${repo_lc}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build summary
+        run: |
+          echo "### Container Build" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Image: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-staging:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Pull image
+        run: docker pull ${{ needs.build-and-push.outputs.image }}:${{ needs.build-and-push.outputs.tag }}
+
+      - name: Start staging container
+        run: |
+          docker run -d --name supplynet360-staging -p 8000:8000 \
+            ${{ needs.build-and-push.outputs.image }}:${{ needs.build-and-push.outputs.tag }}
+
+      - name: Wait for service
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/health >/dev/null; then
+              echo "Service is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Service did not become healthy in time" >&2
+          docker logs supplynet360-staging || true
+          exit 1
+
+      - name: Run staging integration tests
+        run: |
+          curl -fsS http://127.0.0.1:8000/health > staging-health.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("staging-health.json").read_text(encoding="utf-8"))
+          if data.get("status") != "healthy":
+              raise SystemExit("Staging health status is not healthy")
+          print("Staging integration test passed")
+          PY
+
+      - name: Generate deployment report
+        if: always()
+        run: |
+          {
+            echo "# Deployment Report"
+            echo ""
+            echo "- Environment: staging"
+            echo "- Image: ${{ needs.build-and-push.outputs.image }}:${{ needs.build-and-push.outputs.tag }}"
+            echo "- Branch: ${{ github.ref }}"
+            echo "- Commit: ${{ github.sha }}"
+            echo "- Run URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } > deployment-report.md
+          cat deployment-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload deployment report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-report
+          path: deployment-report.md
+          retention-days: 14
+
+      - name: Cleanup staging container
+        if: always()
+        run: docker rm -f supplynet360-staging || true
+
+  notify-on-failure:
+    if: failure()
+    needs: [build-and-push, deploy-staging]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Emit failure notification
+        run: |
+          echo "::error::CD pipeline failed. Review the workflow logs."
+          echo "### 🚨 CD Failure Notification" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Repository: ${{ github.repository }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Branch: ${{ github.ref }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Run URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> "$GITHUB_STEP_SUMMARY"
