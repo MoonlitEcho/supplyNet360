@@ -54,6 +54,7 @@ def _install_stubs() -> None:
 
 
 _install_stubs()
+# Import intentionally placed after stub installation to avoid heavy test dependencies.
 from Deploy.api import app  # noqa: E402
 
 
