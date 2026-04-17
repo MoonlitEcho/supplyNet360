@@ -5,7 +5,7 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:     # Allows manual trigger
+  workflow_dispatch:
 
 jobs:
   lint-and-test:
@@ -33,10 +33,10 @@ jobs:
       - name: Check formatting with Black
         run: black --check .
 
-      - name: Run Tests (if tests folder exists)
+      - name: Run Tests (if any exist)
         run: |
           if [ -d "tests" ] && [ "$(ls -A tests/ 2>/dev/null)" ]; then
             pytest tests/ --verbose --cov=. --cov-report=xml
           else
-            echo "No tests folder found or it's empty. Skipping tests."
+            echo "ℹ️ No tests folder found or it's empty. Skipping tests."
           fi
